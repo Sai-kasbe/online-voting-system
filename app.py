@@ -323,31 +323,25 @@ if st.button("Register"):
     if image is None:
         st.error("Please upload an image")
         return
+os.makedirs("images", exist_ok=True)
+image_path = "images/" + image.name
+with open(image_path, "wb") as f:
+    f.write(image.getbuffer())
 
-    os.makedirs("images", exist_ok=True)
-
-    image_path = "images/" + image.name
-
-    with open(image_path, "wb") as f:
-        f.write(image.getbuffer())
-
-    success = add_user(
-        roll,
-        name,
-        password,
-        email,
-        phone,
-        image_path
+success = add_user(
+    roll,
+    name,
+    password,
+    email,
+    phone,
+    image_path
     )
 
-    if success:
-        st.success("Registered Successfully")
-    else:
-        st.error("User already exists")
-        if success:
-            st.success("Registered Successfully")
-        else:
-            st.error("User already exists")
+if success:
+    st.success("Registered Successfully")
+else:
+    st.error("User already exists")
+        
 
 # ===== MAIN =====
 def main():
@@ -399,5 +393,6 @@ def main():
 
 if __name__=="__main__":
     main()
+
 
 
