@@ -319,9 +319,7 @@ def register():
     password=st.text_input("Password",type="password")
 
    image = st.file_uploader("Upload Image")
-
 if st.button("Register"):
-
     if image is None:
         st.error("Please upload an image")
         return
@@ -401,4 +399,5 @@ def main():
 
 if __name__=="__main__":
     main()
+
 
