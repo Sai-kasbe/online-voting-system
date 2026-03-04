@@ -318,26 +318,34 @@ def register():
     phone=st.text_input("Phone")
     password=st.text_input("Password",type="password")
 
-    image=st.file_uploader("Upload Image")
+   image = st.file_uploader("Upload Image")
 
-    if st.button("Register"):
+if st.button("Register"):
 
-        os.makedirs("images",exist_ok=True)
+    if image is None:
+        st.error("Please upload an image")
+        return
 
-        path="images/"+image.name
+    os.makedirs("images", exist_ok=True)
 
-        with open(path,"wb") as f:
-            f.write(image.getbuffer())
+    image_path = "images/" + image.name
 
-        success=add_user(
-            roll,
-            name,
-            hash_password(password),
-            email,
-            phone,
-            path
-        )
+    with open(image_path, "wb") as f:
+        f.write(image.getbuffer())
 
+    success = add_user(
+        roll,
+        name,
+        password,
+        email,
+        phone,
+        image_path
+    )
+
+    if success:
+        st.success("Registered Successfully")
+    else:
+        st.error("User already exists")
         if success:
             st.success("Registered Successfully")
         else:
@@ -393,3 +401,4 @@ def main():
 
 if __name__=="__main__":
     main()
+
