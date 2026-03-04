@@ -1,100 +1,395 @@
 import streamlit as st
+import pandas as pd
 import sqlite3
-from werkzeug.security import generate_password_hash, check_password_hash
-import smtplib
-import random
+import hashlib
+from datetime import datetime
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from database import add_user
 
-# Initialize session state for page navigation
-if 'page' not in st.session_state:
-    st.session_state.page = 'login'  # Default page
+# ===== CONFIG =====
+st.set_page_config(page_title="KGRCET ONLINE ELECTION SYSTEM", layout="wide")
 
-# Page functions (replace with your actual page functions)
-def home_page():
-    st.title("Home Page")
-    st.write("Welcome to the College Voting System!")
-    
-def login_page():
-    st.title("Login")
-    # Login form
-    username = st.text_input("Username")
-    password = st.text_input("Password", type='password')
-    
-    if st.button("Login"):
-        user = authenticate_user(username, password)
-        if user:
-            st.session_state.page = 'dashboard'
-        else:
-            st.error("Invalid credentials, please try again.")
+# ===== UI STYLE =====
+st.markdown("""
+<style>
+body { background-color: #0D1B2A; color: white; }
+.stButton>button {
+    background-color: #1B263B;
+    color: white;
+    border-radius: 10px;
+    padding: 0.5rem 1.5rem;
+    margin-top: 10px;
+}
+h1, h2, h3, h4 {
+    color: #E0E1DD;
+}
+</style>
+""", unsafe_allow_html=True)
 
-def dashboard_page():
-    st.title("User Dashboard")
-    st.write(f"Welcome, {st.session_state.user_name}!")
-    st.button("Logout", on_click=logout)
+# ===== DATABASE =====
+def get_connection():
+    conn = sqlite3.connect("voting_app.db", check_same_thread=False)
+    return conn, conn.cursor()
 
-def logout():
-    del st.session_state.page  # This will reset the session and go to the login page
+def create_tables():
+    conn, cursor = get_connection()
 
-def authenticate_user(username, password):
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users(
+        roll_no TEXT PRIMARY KEY,
+        name TEXT,
+        password TEXT,
+        email TEXT,
+        phone TEXT,
+        image TEXT,
+        has_voted INTEGER DEFAULT 0
+    )''')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS candidates(
+        candidate_name TEXT,
+        roll_no TEXT PRIMARY KEY,
+        department TEXT,
+        year_sem TEXT,
+        role TEXT,
+        image TEXT,
+        votes INTEGER DEFAULT 0
+    )''')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS result_schedule(
+        id INTEGER PRIMARY KEY,
+        result_date TEXT,
+        is_announced INTEGER DEFAULT 0
+    )''')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS blockchain(
+        vote_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        roll_no TEXT,
+        candidate TEXT,
+        vote_hash TEXT,
+        timestamp TEXT
+    )''')
+
+    conn.commit()
     conn.close()
-    if user and check_password_hash(user[1], password):  # Assuming password is stored in the second column
-        st.session_state.user_name = user[0]  # Store the user name
-        return True
-    return False
 
-# OTP Email Functionality
-def send_otp_email(to_email):
-    otp = random.randint(100000, 999999)
-    subject = "Your OTP for College Voting System"
-    body = f"Your OTP is {otp}"
-    
-    # Send email
-    sender_email = "your_email@example.com"
-    password = "your_password"
-    
-    msg = MIMEMultipart()
-    msg['From'] = sender_email
-    msg['To'] = to_email
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
-    
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(sender_email, password)
-        text = msg.as_string()
-        server.sendmail(sender_email, to_email, text)
-        server.quit()
-        return otp
-    except Exception as e:
-        st.error(f"Error sending email: {e}")
-        return None
+# ===== SECURITY =====
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-# Image upload function
-def save_uploaded_image(uploaded_file):
-    if uploaded_file is not None:
-        file_path = os.path.join("images", uploaded_file.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        return file_path
+# ===== AUTH =====
+def authenticate_user(roll_no, password):
+    conn, cursor = get_connection()
+    cursor.execute(
+        "SELECT * FROM users WHERE roll_no=? AND password=?",
+        (roll_no, hash_password(password))
+    )
+    row = cursor.fetchone()
+
+    if row:
+        return {
+            "roll_no": row[0],
+            "name": row[1],
+            "email": row[3],
+            "phone": row[4],
+            "image": row[5],
+            "has_voted": row[6]
+        }
     return None
 
-# Main App Logic
-pages = {
-    'login': login_page,
-    'home': home_page,
-    'dashboard': dashboard_page,
-}
+# ===== BLOCKCHAIN LOG =====
+def record_vote_hash(roll_no, candidate):
+    vote_string = roll_no + candidate + datetime.now().isoformat()
+    vote_hash = hashlib.sha256(vote_string.encode()).hexdigest()
 
-# Routing page based on session state
-if st.session_state.page in pages:
-    pages[st.session_state.page]()
-else:
-    st.error("Page not found!")
+    conn, cursor = get_connection()
 
+    cursor.execute(
+        "INSERT INTO blockchain (roll_no,candidate,vote_hash,timestamp) VALUES (?,?,?,?)",
+        (roll_no, candidate, vote_hash, datetime.now().isoformat())
+    )
+
+    conn.commit()
+    conn.close()
+
+# ===== ADMIN =====
+ADMIN_ID = "22QM1A6721"
+ADMIN_PASS = hash_password("Sai7@99499")
+
+# ===== USER LOGIN =====
+def user_login():
+    st.subheader("User Login")
+
+    roll_no = st.text_input("Roll Number")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        user = authenticate_user(roll_no, password)
+
+        if user:
+            st.session_state.user_logged_in = True
+            st.session_state.user_data = user
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+# ===== USER DASHBOARD =====
+def user_dashboard(user):
+
+    st.header("Voter Dashboard")
+
+    col1, col2 = st.columns([1,2])
+
+    with col1:
+        if user["image"]:
+            st.image(user["image"], width=150)
+
+    with col2:
+        st.write("Name:", user["name"])
+        st.write("Roll:", user["roll_no"])
+        st.write("Email:", user["email"])
+        st.write("Phone:", user["phone"])
+
+    if user["has_voted"] == 0:
+
+        st.subheader("Cast Vote")
+
+        conn, cursor = get_connection()
+
+        candidates = pd.read_sql("SELECT * FROM candidates", conn)
+
+        for _, row in candidates.iterrows():
+
+            with st.expander(row["candidate_name"]):
+
+                col1, col2 = st.columns([1,3])
+
+                with col1:
+                    st.image(row["image"], width=100)
+
+                with col2:
+                    st.write("Department:",row["department"])
+                    st.write("Year:",row["year_sem"])
+                    st.write("Role:",row["role"])
+
+                if st.button("Vote", key=row["roll_no"]):
+
+                    cursor.execute(
+                        "UPDATE candidates SET votes=votes+1 WHERE roll_no=?",
+                        (row["roll_no"],)
+                    )
+
+                    cursor.execute(
+                        "UPDATE users SET has_voted=1 WHERE roll_no=?",
+                        (user["roll_no"],)
+                    )
+
+                    conn.commit()
+
+                    record_vote_hash(user["roll_no"], row["candidate_name"])
+
+                    st.success("Vote Cast Successfully")
+
+                    st.session_state.user_data["has_voted"]=1
+                    st.rerun()
+
+        conn.close()
+
+    # RESULTS
+    conn, cursor = get_connection()
+
+    result = cursor.execute("SELECT * FROM result_schedule").fetchone()
+
+    if result and result[2]==1:
+
+        st.subheader("Election Results")
+
+        result_df = pd.read_sql(
+            "SELECT candidate_name,role,votes FROM candidates ORDER BY votes DESC",
+            conn
+        )
+
+        st.dataframe(result_df)
+
+    conn.close()
+
+# ===== ADMIN LOGIN =====
+def admin_login():
+
+    st.subheader("Admin Login")
+
+    username = st.text_input("Admin ID")
+    password = st.text_input("Password",type="password")
+
+    if st.button("Login"):
+
+        if username==ADMIN_ID and hash_password(password)==ADMIN_PASS:
+
+            st.session_state.admin_logged_in=True
+            st.rerun()
+
+        else:
+            st.error("Invalid admin credentials")
+
+# ===== ADMIN DASHBOARD =====
+def admin_dashboard():
+
+    st.header("Admin Dashboard")
+
+    tab1,tab2,tab3 = st.tabs([
+        "Add Candidate",
+        "Users",
+        "Results"
+    ])
+
+    # ADD CANDIDATE
+    with tab1:
+
+        name=st.text_input("Candidate Name")
+        roll=st.text_input("Roll Number")
+        dept=st.text_input("Department")
+        year=st.text_input("Year/Sem")
+        role=st.selectbox("Role",["President","Vice President","Secretary"])
+
+        image=st.file_uploader("Upload Image")
+
+        if st.button("Add Candidate"):
+
+            os.makedirs("images",exist_ok=True)
+
+            path="images/"+image.name
+
+            with open(path,"wb") as f:
+                f.write(image.getbuffer())
+
+            conn,cursor=get_connection()
+
+            cursor.execute("""
+            INSERT INTO candidates VALUES(?,?,?,?,?,?,0)
+            """,(name,roll,dept,year,role,path))
+
+            conn.commit()
+
+            st.success("Candidate Added")
+
+    # USERS
+    with tab2:
+
+        conn,_=get_connection()
+
+        df=pd.read_sql("SELECT * FROM users",conn)
+
+        st.dataframe(df)
+
+    # RESULTS
+    with tab3:
+
+        conn,cursor=get_connection()
+
+        date=st.date_input("Result Date")
+
+        if st.button("Schedule Result"):
+
+            cursor.execute("""
+            INSERT OR REPLACE INTO result_schedule
+            VALUES(1,?,0)
+            """,(str(date),))
+
+            conn.commit()
+
+            st.success("Result Scheduled")
+
+        if st.button("Announce Result"):
+
+            cursor.execute("""
+            UPDATE result_schedule SET is_announced=1
+            """)
+
+            conn.commit()
+
+            st.success("Result Announced")
+
+# ===== REGISTER =====
+def register():
+
+    st.subheader("Register")
+
+    name=st.text_input("Name")
+    roll=st.text_input("Roll Number")
+    email=st.text_input("Email")
+    phone=st.text_input("Phone")
+    password=st.text_input("Password",type="password")
+
+    image=st.file_uploader("Upload Image")
+
+    if st.button("Register"):
+
+        os.makedirs("images",exist_ok=True)
+
+        path="images/"+image.name
+
+        with open(path,"wb") as f:
+            f.write(image.getbuffer())
+
+        success=add_user(
+            roll,
+            name,
+            hash_password(password),
+            email,
+            phone,
+            path
+        )
+
+        if success:
+            st.success("Registered Successfully")
+        else:
+            st.error("User already exists")
+
+# ===== MAIN =====
+def main():
+
+    st.title("KGRCET ONLINE ELECTION SYSTEM")
+
+    create_tables()
+
+    if "admin_logged_in" not in st.session_state:
+        st.session_state.admin_logged_in=False
+
+    if "user_logged_in" not in st.session_state:
+        st.session_state.user_logged_in=False
+
+    if st.session_state.user_logged_in:
+
+        user_dashboard(st.session_state.user_data)
+
+        if st.button("Logout"):
+            st.session_state.user_logged_in=False
+            st.rerun()
+
+    elif st.session_state.admin_logged_in:
+
+        admin_dashboard()
+
+        if st.button("Logout"):
+            st.session_state.admin_logged_in=False
+            st.rerun()
+
+    else:
+
+        page=st.sidebar.selectbox(
+            "Menu",
+            ["Home","User Login","Admin Login","Register"]
+        )
+
+        if page=="User Login":
+            user_login()
+
+        elif page=="Admin Login":
+            admin_login()
+
+        elif page=="Register":
+            register()
+
+        else:
+            st.write("Welcome to KGRCET Blockchain Voting System")
+
+if __name__=="__main__":
+    main()
