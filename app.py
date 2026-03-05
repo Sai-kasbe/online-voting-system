@@ -3,34 +3,63 @@ import pandas as pd
 import os
 from database import create_tables, add_user, authenticate_user, get_connection
 
-# Ensure image folder exists
-os.makedirs("images", exist_ok=True)
-
+# ---------- CONFIG ----------
 st.set_page_config(page_title="KGRCET ONLINE ELECTION SYSTEM", layout="wide")
 
-# ---------------- STYLE ----------------
+os.makedirs("images", exist_ok=True)
+
+# ---------- STYLE ----------
 st.markdown("""
 <style>
-body { background-color:#0D1B2A; color:white; }
+body {background-color:#0D1B2A;color:white;}
 .stButton>button {
 background-color:#1B263B;
 color:white;
 border-radius:10px;
+padding:0.5rem 1rem;
 }
-h1,h2,h3 { color:#E0E1DD; }
+.card {
+background-color:#1B263B;
+padding:15px;
+border-radius:10px;
+margin-bottom:10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-
-# ---------------- ADMIN ----------------
+# ---------- ADMIN LOGIN ----------
 ADMIN_ID = "22QM1A6721"
 ADMIN_PASS = "Sai7@99499"
 
 
-# ---------------- USER LOGIN ----------------
+# ---------- HOME ----------
+def home():
+
+    st.title("KGRCET ONLINE ELECTION SYSTEM")
+
+    st.markdown("""
+This platform enables **secure digital elections** using blockchain-style hashing.
+
+### Features
+• Secure authentication  
+• One person one vote  
+• Admin managed candidates  
+• Blockchain vote hashing  
+• Transparent election results  
+
+### Demo Credentials
+Admin  
+ID: 22QM1A6721  
+Password: Sai7@99499
+""")
+
+    st.image("https://images.unsplash.com/photo-1551836022-d5d88e9218df")
+
+
+# ---------- USER LOGIN ----------
 def user_login():
 
-    st.subheader("User Login")
+    st.header("User Login")
 
     roll = st.text_input("Roll Number")
     password = st.text_input("Password", type="password")
@@ -40,15 +69,18 @@ def user_login():
         user = authenticate_user(roll, password)
 
         if user:
-            st.session_state.user_logged_in = True
-            st.session_state.user_data = user
+            st.session_state.user = user
+            st.session_state.logged = True
             st.rerun()
+
         else:
-            st.error("Invalid credentials")
+            st.error("Invalid login")
 
 
-# ---------------- USER DASHBOARD ----------------
-def user_dashboard(user):
+# ---------- USER DASHBOARD ----------
+def user_dashboard():
+
+    user = st.session_state.user
 
     st.header("Voter Dashboard")
 
@@ -64,31 +96,33 @@ def user_dashboard(user):
         st.write("Email:", user["email"])
         st.write("Phone:", user["phone"])
 
-    if user["has_voted"] == 0:
+    if user["has_voted"] == 1:
+        st.success("You already voted")
+        return
 
-        st.subheader("Cast Vote")
+    st.subheader("Cast Your Vote")
 
-        conn, cursor = get_connection()
+    conn, cursor = get_connection()
 
-        df = pd.read_sql("SELECT * FROM candidates", conn)
+    df = pd.read_sql("SELECT * FROM candidates", conn)
 
-        if df.empty:
-            st.warning("No candidates available")
+    if df.empty:
+        st.warning("No candidates available")
 
-        for _, row in df.iterrows():
+    for _, row in df.iterrows():
 
-            with st.expander(row["candidate_name"]):
+        with st.container():
 
-                c1, c2 = st.columns([1,3])
+            col1, col2 = st.columns([1,3])
 
-                with c1:
-                    if row["image"]:
-                        st.image(row["image"], width=100)
+            with col1:
+                if row["image"]:
+                    st.image(row["image"], width=120)
 
-                with c2:
-                    st.write("Department:", row["department"])
-                    st.write("Year:", row["year_sem"])
-                    st.write("Role:", row["role"])
+            with col2:
+                st.markdown(f"### {row['candidate_name']}")
+                st.write("Department:", row["department"])
+                st.write("Role:", row["role"])
 
                 if st.button("Vote", key=row["roll_no"]):
 
@@ -104,18 +138,18 @@ def user_dashboard(user):
 
                     conn.commit()
 
-                    st.success("Vote cast successfully")
+                    st.success("Vote recorded")
 
-                    st.session_state.user_data["has_voted"] = 1
+                    st.session_state.user["has_voted"] = 1
                     st.rerun()
 
-        conn.close()
+    conn.close()
 
 
-# ---------------- ADMIN LOGIN ----------------
+# ---------- ADMIN LOGIN ----------
 def admin_login():
 
-    st.subheader("Admin Login")
+    st.header("Admin Login")
 
     user = st.text_input("Admin ID")
     password = st.text_input("Password", type="password")
@@ -123,13 +157,15 @@ def admin_login():
     if st.button("Login"):
 
         if user == ADMIN_ID and password == ADMIN_PASS:
-            st.session_state.admin_logged_in = True
+
+            st.session_state.admin = True
             st.rerun()
+
         else:
-            st.error("Invalid admin login")
+            st.error("Invalid admin credentials")
 
 
-# ---------------- ADMIN DASHBOARD ----------------
+# ---------- ADMIN DASHBOARD ----------
 def admin_dashboard():
 
     st.header("Admin Dashboard")
@@ -142,19 +178,23 @@ def admin_dashboard():
         roll = st.text_input("Roll Number")
         dept = st.text_input("Department")
         year = st.text_input("Year/Sem")
-        role = st.selectbox("Role",["President","Vice President","Secretary"])
+
+        role = st.selectbox(
+        "Role",
+        ["President","Vice President","Secretary"]
+        )
 
         image = st.file_uploader("Upload Image")
 
         if st.button("Add Candidate"):
 
-            image_path = None
+            path = None
 
             if image is not None:
 
-                image_path = "images/" + image.name
+                path = "images/" + image.name
 
-                with open(image_path,"wb") as f:
+                with open(path,"wb") as f:
                     f.write(image.getbuffer())
 
             conn, cursor = get_connection()
@@ -163,7 +203,7 @@ def admin_dashboard():
             INSERT INTO candidates
             (candidate_name,roll_no,department,year_sem,role,image,votes)
             VALUES (?,?,?,?,?,?,0)
-            """,(name,roll,dept,year,role,image_path))
+            """,(name,roll,dept,year,role,path))
 
             conn.commit()
 
@@ -182,28 +222,29 @@ def admin_dashboard():
         st.dataframe(df)
 
 
-# ---------------- REGISTER ----------------
+# ---------- REGISTER ----------
 def register():
 
-    st.subheader("Register")
+    st.header("Register")
 
     name = st.text_input("Full Name")
     roll = st.text_input("Roll Number")
     email = st.text_input("Email")
     phone = st.text_input("Phone")
+
     password = st.text_input("Password", type="password")
 
     image = st.file_uploader("Upload Image")
 
     if st.button("Register"):
 
-        image_path = None
+        path = None
 
         if image is not None:
 
-            image_path = "images/" + image.name
+            path = "images/" + image.name
 
-            with open(image_path,"wb") as f:
+            with open(path,"wb") as f:
                 f.write(image.getbuffer())
 
         success = add_user(
@@ -212,63 +253,126 @@ def register():
             password,
             email,
             phone,
-            image_path
+            path
         )
 
         if success:
             st.success("Registration successful")
+
         else:
             st.error("User already exists")
 
 
-# ---------------- MAIN ----------------
-def main():
+# ---------- RESULTS ----------
+def results():
 
-    st.title("KGRCET ONLINE ELECTION SYSTEM")
+    st.header("Election Results")
+
+    conn,_ = get_connection()
+
+    df = pd.read_sql(
+    "SELECT candidate_name,votes FROM candidates",
+    conn
+    )
+
+    if df.empty:
+
+        st.warning("No results yet")
+
+        return
+
+    st.dataframe(df)
+
+    st.bar_chart(df.set_index("candidate_name"))
+
+
+# ---------- BLOCKCHAIN ----------
+def transparency():
+
+    st.header("Vote Transparency")
+
+    conn,_ = get_connection()
+
+    df = pd.read_sql(
+    "SELECT vote_id,roll_no,candidate,vote_hash,timestamp FROM blockchain",
+    conn
+    )
+
+    if df.empty:
+
+        st.warning("No votes recorded")
+
+        return
+
+    st.dataframe(df)
+
+
+# ---------- MAIN ----------
+def main():
 
     create_tables()
 
-    if "user_logged_in" not in st.session_state:
-        st.session_state.user_logged_in = False
+    if "logged" not in st.session_state:
+        st.session_state.logged = False
 
-    if "admin_logged_in" not in st.session_state:
-        st.session_state.admin_logged_in = False
+    if "admin" not in st.session_state:
+        st.session_state.admin = False
 
 
-    if st.session_state.user_logged_in:
+    menu = st.sidebar.selectbox(
+    "Menu",
+    [
+    "Home",
+    "User Login",
+    "Admin Login",
+    "Register",
+    "Results",
+    "Vote Transparency"
+    ]
+    )
 
-        user_dashboard(st.session_state.user_data)
+
+    if st.session_state.logged:
+
+        user_dashboard()
 
         if st.button("Logout"):
-            st.session_state.user_logged_in = False
+
+            st.session_state.logged = False
             st.rerun()
 
-    elif st.session_state.admin_logged_in:
+        return
+
+
+    if st.session_state.admin:
 
         admin_dashboard()
 
         if st.button("Logout"):
-            st.session_state.admin_logged_in = False
+
+            st.session_state.admin = False
             st.rerun()
 
-    else:
+        return
 
-        page = st.sidebar.selectbox(
-        "Menu",
-        ["Home","User Login","Admin Login","Register"]
-        )
 
-        if page == "User Login":
-            user_login()
+    if menu == "Home":
+        home()
 
-        elif page == "Admin Login":
-            admin_login()
+    elif menu == "User Login":
+        user_login()
 
-        elif page == "Register":
-            register()
+    elif menu == "Admin Login":
+        admin_login()
 
-        else:
-            st.write("Welcome to KGRCET Secure Voting System")
+    elif menu == "Register":
+        register()
+
+    elif menu == "Results":
+        results()
+
+    elif menu == "Vote Transparency":
+        transparency()
 
 
 if __name__ == "__main__":
