@@ -340,19 +340,32 @@ def transparency():
 
     st.header("Vote Transparency")
 
-    conn,_=get_connection()
+    conn, cursor = get_connection()
 
-    df=pd.read_sql(
-    "SELECT vote_id,roll_no,candidate,vote_hash,previous_hash,timestamp FROM blockchain",
-    conn
-    )
+    try:
 
-    if df.empty:
+        df = pd.read_sql(
+            "SELECT vote_id, roll_no, candidate, vote_hash, previous_hash, timestamp FROM blockchain",
+            conn
+        )
 
-        st.warning("No votes recorded")
-        return
+        if df.empty:
 
-    st.dataframe(df)
+            st.warning("No votes recorded yet")
+
+        else:
+
+            st.dataframe(df)
+
+            st.info(
+                "Each vote stores the previous block hash, forming a blockchain chain."
+            )
+
+    except Exception as e:
+
+        st.error("Blockchain table not initialized yet.")
+
+    conn.close())
 
 
 # ---------------- MAIN ----------------
@@ -423,4 +436,5 @@ def main():
 
 if __name__=="__main__":
     main()
+
 
