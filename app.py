@@ -365,7 +365,7 @@ def transparency():
 
         st.error("Blockchain table not initialized yet.")
 
-    conn.close())
+    conn.close()
 
 
 # ---------------- MAIN ----------------
@@ -436,5 +436,6 @@ def main():
 
 if __name__=="__main__":
     main()
+
 
 
