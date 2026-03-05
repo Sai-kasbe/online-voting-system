@@ -6,7 +6,6 @@ from datetime import datetime
 # ensure data folder exists
 os.makedirs("data", exist_ok=True)
 
-
 def get_connection():
     conn = sqlite3.connect("data/voting_app.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -22,6 +21,7 @@ def create_tables():
 
     conn, cursor = get_connection()
 
+    # USERS TABLE
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         roll_no TEXT PRIMARY KEY,
@@ -34,6 +34,7 @@ def create_tables():
     )
     """)
 
+    # CANDIDATES TABLE
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS candidates (
         candidate_name TEXT,
@@ -46,8 +47,11 @@ def create_tables():
     )
     """)
 
+    # RESET BLOCKCHAIN TABLE (important fix)
+    cursor.execute("DROP TABLE IF EXISTS blockchain")
+
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS blockchain (
+    CREATE TABLE blockchain (
         vote_id INTEGER PRIMARY KEY AUTOINCREMENT,
         roll_no TEXT,
         candidate TEXT,
@@ -89,14 +93,14 @@ def add_user(roll_no, name, password, email, phone, image):
         conn.close()
 
 
-# ---------------- AUTHENTICATE USER ----------------
+# ---------------- AUTH USER ----------------
 def authenticate_user(roll_no, password):
 
     conn, cursor = get_connection()
 
     cursor.execute(
-    "SELECT * FROM users WHERE roll_no=? AND password=?",
-    (roll_no, hash_password(password))
+        "SELECT * FROM users WHERE roll_no=? AND password=?",
+        (roll_no, hash_password(password))
     )
 
     row = cursor.fetchone()
@@ -106,24 +110,24 @@ def authenticate_user(roll_no, password):
     if row:
 
         return {
-        "roll_no":row[0],
-        "name":row[1],
-        "email":row[3],
-        "phone":row[4],
-        "image":row[5],
-        "has_voted":row[6]
+            "roll_no": row[0],
+            "name": row[1],
+            "email": row[3],
+            "phone": row[4],
+            "image": row[5],
+            "has_voted": row[6]
         }
 
     return None
 
 
-# ---------------- RECORD BLOCKCHAIN VOTE ----------------
+# ---------------- BLOCKCHAIN RECORD ----------------
 def record_vote_block(roll_no, candidate):
 
     conn, cursor = get_connection()
 
     cursor.execute(
-    "SELECT vote_hash FROM blockchain ORDER BY vote_id DESC LIMIT 1"
+        "SELECT vote_hash FROM blockchain ORDER BY vote_id DESC LIMIT 1"
     )
 
     last = cursor.fetchone()
