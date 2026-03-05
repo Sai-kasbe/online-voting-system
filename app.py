@@ -26,21 +26,72 @@ ADMIN_PASS="Sai7@99499"
 # ---------------- HOME ----------------
 def home():
 
-    st.title("KGRCET ONLINE ELECTION SYSTEM")
+    conn, _ = get_connection()
+
+    users = pd.read_sql("SELECT COUNT(*) as total FROM users", conn).iloc[0]["total"]
+    candidates = pd.read_sql("SELECT COUNT(*) as total FROM candidates", conn).iloc[0]["total"]
+    votes = pd.read_sql("SELECT COUNT(*) as total FROM blockchain", conn).iloc[0]["total"]
 
     st.markdown("""
-Secure online voting platform using **Blockchain vote hashing**.
+    <div style="background-color:#1B263B;padding:20px;border-radius:10px">
+        <h1 style="text-align:center;color:white">
+        KGRCET DIGITAL ELECTION PORTAL
+        </h1>
+        <p style="text-align:center;font-size:18px">
+        Secure Blockchain Enabled Online Voting System
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-Features:
+    st.write("")
 
-• Secure user authentication  
-• One person one vote  
-• Admin candidate management  
-• Blockchain vote transparency  
-• Real time election results  
-""")
+    # ---------- STATISTICS ----------
+    col1, col2, col3 = st.columns(3)
 
-    st.image("https://images.unsplash.com/photo-1551836022-d5d88e9218df")
+    with col1:
+        st.metric("Registered Voters", users)
+
+    with col2:
+        st.metric("Candidates", candidates)
+
+    with col3:
+        st.metric("Votes Cast", votes)
+
+    st.write("")
+    st.write("")
+
+    st.markdown("""
+    ### About This System
+
+    This online election platform ensures **secure, transparent, and tamper-proof voting** using blockchain-based vote hashing.
+
+    Every vote recorded generates a **cryptographic hash** linked to the previous vote block, forming a secure chain similar to blockchain technology.
+    """)
+
+    st.write("")
+
+    st.markdown("""
+    ### System Features
+
+    ✔ Secure voter authentication  
+    ✔ One person one vote enforcement  
+    ✔ Blockchain vote hashing for integrity  
+    ✔ Admin controlled candidate management  
+    ✔ Transparent election result visualization  
+    ✔ Public vote verification through blockchain logs  
+    """)
+
+    st.write("")
+
+    st.info("Demo Admin Login → ID: 22QM1A6721 | Password: Sai7@99499")
+
+    st.write("")
+
+    st.image(
+        "https://images.unsplash.com/photo-1551836022-d5d88e9218df",
+        caption="Digital Voting Infrastructure",
+        use_container_width=True
+    )
 
 
 # ---------------- USER LOGIN ----------------
@@ -372,3 +423,4 @@ def main():
 
 if __name__=="__main__":
     main()
+
