@@ -423,5 +423,3 @@ If you found this project helpful:
 📢 Share with others
 
 ---
-
-If you want, I can also help you create a **GitHub project page that looks like a real startup product page (very impressive for recruiters)**.
