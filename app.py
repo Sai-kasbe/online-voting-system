@@ -1,75 +1,53 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
-from database import (
-    create_tables,
-    add_user,
-    authenticate_user,
-    get_connection
-)
+from database import create_tables, add_user, authenticate_user, get_connection
 
-# -----------------------------
-# PAGE CONFIG
-# -----------------------------
-st.set_page_config(
-    page_title="KGRCET ONLINE ELECTION SYSTEM",
-    layout="wide"
-)
+# Ensure image folder exists
+os.makedirs("images", exist_ok=True)
 
-# -----------------------------
-# STYLE
-# -----------------------------
+st.set_page_config(page_title="KGRCET ONLINE ELECTION SYSTEM", layout="wide")
+
+# ---------------- STYLE ----------------
 st.markdown("""
 <style>
-body { background-color: #0D1B2A; color: white; }
-
+body { background-color:#0D1B2A; color:white; }
 .stButton>button {
-    background-color: #1B263B;
-    color: white;
-    border-radius: 10px;
+background-color:#1B263B;
+color:white;
+border-radius:10px;
 }
-
-h1,h2,h3 {
-    color:#E0E1DD;
-}
+h1,h2,h3 { color:#E0E1DD; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# -----------------------------
-# ADMIN LOGIN
-# -----------------------------
+# ---------------- ADMIN ----------------
 ADMIN_ID = "22QM1A6721"
 ADMIN_PASS = "Sai7@99499"
 
 
-# -----------------------------
-# USER LOGIN
-# -----------------------------
+# ---------------- USER LOGIN ----------------
 def user_login():
 
     st.subheader("User Login")
 
-    roll_no = st.text_input("Roll Number")
+    roll = st.text_input("Roll Number")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
 
-        user = authenticate_user(roll_no, password)
+        user = authenticate_user(roll, password)
 
         if user:
             st.session_state.user_logged_in = True
             st.session_state.user_data = user
             st.rerun()
-
         else:
-            st.error("Invalid Credentials")
+            st.error("Invalid credentials")
 
 
-# -----------------------------
-# USER DASHBOARD
-# -----------------------------
+# ---------------- USER DASHBOARD ----------------
 def user_dashboard(user):
 
     st.header("Voter Dashboard")
@@ -82,11 +60,10 @@ def user_dashboard(user):
 
     with col2:
         st.write("Name:", user["name"])
-        st.write("Roll No:", user["roll_no"])
+        st.write("Roll:", user["roll_no"])
         st.write("Email:", user["email"])
         st.write("Phone:", user["phone"])
 
-    # voting
     if user["has_voted"] == 0:
 
         st.subheader("Cast Vote")
@@ -94,6 +71,9 @@ def user_dashboard(user):
         conn, cursor = get_connection()
 
         df = pd.read_sql("SELECT * FROM candidates", conn)
+
+        if df.empty:
+            st.warning("No candidates available")
 
         for _, row in df.iterrows():
 
@@ -107,7 +87,7 @@ def user_dashboard(user):
 
                 with c2:
                     st.write("Department:", row["department"])
-                    st.write("Year/Sem:", row["year_sem"])
+                    st.write("Year:", row["year_sem"])
                     st.write("Role:", row["role"])
 
                 if st.button("Vote", key=row["roll_no"]):
@@ -124,164 +104,85 @@ def user_dashboard(user):
 
                     conn.commit()
 
-                    st.success("Vote Cast Successfully")
+                    st.success("Vote cast successfully")
 
                     st.session_state.user_data["has_voted"] = 1
                     st.rerun()
 
         conn.close()
 
-    # results
-    conn, cursor = get_connection()
 
-    result = cursor.execute(
-        "SELECT * FROM result_schedule"
-    ).fetchone()
-
-    if result and result[2] == 1:
-
-        st.subheader("Election Results")
-
-        result_df = pd.read_sql(
-            "SELECT candidate_name, role, votes FROM candidates ORDER BY votes DESC",
-            conn
-        )
-
-        st.dataframe(result_df)
-
-    conn.close()
-
-
-# -----------------------------
-# ADMIN LOGIN
-# -----------------------------
+# ---------------- ADMIN LOGIN ----------------
 def admin_login():
 
     st.subheader("Admin Login")
 
-    username = st.text_input("Admin ID")
+    user = st.text_input("Admin ID")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
 
-        if username == ADMIN_ID and password == ADMIN_PASS:
-
+        if user == ADMIN_ID and password == ADMIN_PASS:
             st.session_state.admin_logged_in = True
             st.rerun()
-
         else:
-            st.error("Invalid Admin Credentials")
+            st.error("Invalid admin login")
 
 
-# -----------------------------
-# ADMIN DASHBOARD
-# -----------------------------
+# ---------------- ADMIN DASHBOARD ----------------
 def admin_dashboard():
 
     st.header("Admin Dashboard")
 
-    tab1, tab2, tab3 = st.tabs([
-        "Add Candidate",
-        "Users",
-        "Results"
-    ])
+    tab1, tab2 = st.tabs(["Add Candidate","Users"])
 
-    # -------------------
-    # ADD CANDIDATE
-    # -------------------
     with tab1:
 
         name = st.text_input("Candidate Name")
-        roll_no = st.text_input("Roll Number")
+        roll = st.text_input("Roll Number")
         dept = st.text_input("Department")
-        year_sem = st.text_input("Year/Sem")
-        role = st.selectbox(
-            "Role",
-            ["President","Vice-President","Secretary","Treasurer"]
-        )
+        year = st.text_input("Year/Sem")
+        role = st.selectbox("Role",["President","Vice President","Secretary"])
 
         image = st.file_uploader("Upload Image")
 
         if st.button("Add Candidate"):
 
-            if not name or not roll_no:
-                st.error("Fill required fields")
-                return
-
             image_path = None
 
             if image is not None:
 
-                os.makedirs("images", exist_ok=True)
-
                 image_path = "images/" + image.name
 
-                with open(image_path, "wb") as f:
+                with open(image_path,"wb") as f:
                     f.write(image.getbuffer())
 
             conn, cursor = get_connection()
 
             cursor.execute("""
             INSERT INTO candidates
-            (candidate_name, roll_no, department, year_sem, role, image, votes)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
-            """,
-            (name, roll_no, dept, year_sem, role, image_path))
+            (candidate_name,roll_no,department,year_sem,role,image,votes)
+            VALUES (?,?,?,?,?,?,0)
+            """,(name,roll,dept,year,role,image_path))
 
             conn.commit()
 
-            st.success("Candidate Added")
+            st.success("Candidate added")
 
 
-    # -------------------
-    # USERS
-    # -------------------
     with tab2:
 
-        conn, _ = get_connection()
+        conn,_ = get_connection()
 
         df = pd.read_sql(
-            "SELECT roll_no,name,email,phone,has_voted FROM users",
-            conn
+        "SELECT roll_no,name,email,phone,has_voted FROM users",
+        conn
         )
 
         st.dataframe(df)
 
 
-    # -------------------
-    # RESULT SETTINGS
-    # -------------------
-    with tab3:
-
-        conn, cursor = get_connection()
-
-        date = st.date_input("Result Date")
-
-        if st.button("Schedule Result"):
-
-            cursor.execute("""
-            INSERT OR REPLACE INTO result_schedule
-            VALUES(1,?,0)
-            """,(str(date),))
-
-            conn.commit()
-
-            st.success("Result Scheduled")
-
-        if st.button("Announce Result"):
-
-            cursor.execute(
-                "UPDATE result_schedule SET is_announced=1"
-            )
-
-            conn.commit()
-
-            st.success("Result Announced")
-
-
-# -----------------------------
-# USER REGISTRATION
-# -----------------------------
+# ---------------- REGISTER ----------------
 def register():
 
     st.subheader("Register")
@@ -296,19 +197,13 @@ def register():
 
     if st.button("Register"):
 
-        if not name or not roll or not email or not phone or not password:
-            st.error("Please fill all fields")
-            return
-
         image_path = None
 
         if image is not None:
 
-            os.makedirs("images", exist_ok=True)
-
             image_path = "images/" + image.name
 
-            with open(image_path, "wb") as f:
+            with open(image_path,"wb") as f:
                 f.write(image.getbuffer())
 
         success = add_user(
@@ -321,25 +216,24 @@ def register():
         )
 
         if success:
-            st.success("Registered Successfully")
+            st.success("Registration successful")
         else:
             st.error("User already exists")
 
 
-# -----------------------------
-# MAIN APP
-# -----------------------------
+# ---------------- MAIN ----------------
 def main():
 
     st.title("KGRCET ONLINE ELECTION SYSTEM")
 
     create_tables()
 
+    if "user_logged_in" not in st.session_state:
+        st.session_state.user_logged_in = False
+
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
 
-    if "user_logged_in" not in st.session_state:
-        st.session_state.user_logged_in = False
 
     if st.session_state.user_logged_in:
 
@@ -360,8 +254,8 @@ def main():
     else:
 
         page = st.sidebar.selectbox(
-            "Menu",
-            ["Home","User Login","Admin Login","Register"]
+        "Menu",
+        ["Home","User Login","Admin Login","Register"]
         )
 
         if page == "User Login":
@@ -374,9 +268,7 @@ def main():
             register()
 
         else:
-            st.write(
-                "Welcome to KGRCET Secure Blockchain Voting System"
-            )
+            st.write("Welcome to KGRCET Secure Voting System")
 
 
 if __name__ == "__main__":
