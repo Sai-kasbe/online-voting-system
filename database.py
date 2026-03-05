@@ -3,24 +3,23 @@ import hashlib
 import os
 from datetime import datetime
 
-# Ensure data folder exists
+# ensure data folder exists
 os.makedirs("data", exist_ok=True)
 
 
-# ---------------- DATABASE CONNECTION ----------------
 def get_connection():
     conn = sqlite3.connect("data/voting_app.db", check_same_thread=False)
     cursor = conn.cursor()
     return conn, cursor
 
 
-# ---------------- PASSWORD HASH ----------------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 
 # ---------------- CREATE TABLES ----------------
 def create_tables():
+
     conn, cursor = get_connection()
 
     cursor.execute("""
@@ -48,19 +47,12 @@ def create_tables():
     """)
 
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS result_schedule (
-        id INTEGER PRIMARY KEY,
-        result_date TEXT,
-        is_announced INTEGER DEFAULT 0
-    )
-    """)
-
-    cursor.execute("""
     CREATE TABLE IF NOT EXISTS blockchain (
         vote_id INTEGER PRIMARY KEY AUTOINCREMENT,
         roll_no TEXT,
         candidate TEXT,
         vote_hash TEXT,
+        previous_hash TEXT,
         timestamp TEXT
     )
     """)
@@ -78,19 +70,22 @@ def add_user(roll_no, name, password, email, phone, image):
 
         cursor.execute("""
         INSERT INTO users
-        (roll_no, name, password, email, phone, image, has_voted)
-        VALUES (?, ?, ?, ?, ?, ?, 0)
+        (roll_no,name,password,email,phone,image,has_voted)
+        VALUES (?,?,?,?,?,?,0)
         """,
-        (roll_no, name, hash_password(password), email, phone, image)
+        (roll_no,name,hash_password(password),email,phone,image)
         )
 
         conn.commit()
+
         return True
 
     except sqlite3.IntegrityError:
+
         return False
 
     finally:
+
         conn.close()
 
 
@@ -100,8 +95,8 @@ def authenticate_user(roll_no, password):
     conn, cursor = get_connection()
 
     cursor.execute(
-        "SELECT * FROM users WHERE roll_no=? AND password=?",
-        (roll_no, hash_password(password))
+    "SELECT * FROM users WHERE roll_no=? AND password=?",
+    (roll_no, hash_password(password))
     )
 
     row = cursor.fetchone()
@@ -109,13 +104,43 @@ def authenticate_user(roll_no, password):
     conn.close()
 
     if row:
+
         return {
-            "roll_no": row[0],
-            "name": row[1],
-            "email": row[3],
-            "phone": row[4],
-            "image": row[5],
-            "has_voted": row[6]
+        "roll_no":row[0],
+        "name":row[1],
+        "email":row[3],
+        "phone":row[4],
+        "image":row[5],
+        "has_voted":row[6]
         }
 
     return None
+
+
+# ---------------- RECORD BLOCKCHAIN VOTE ----------------
+def record_vote_block(roll_no, candidate):
+
+    conn, cursor = get_connection()
+
+    cursor.execute(
+    "SELECT vote_hash FROM blockchain ORDER BY vote_id DESC LIMIT 1"
+    )
+
+    last = cursor.fetchone()
+
+    previous_hash = last[0] if last else "GENESIS"
+
+    vote_string = roll_no + candidate + previous_hash + datetime.now().isoformat()
+
+    vote_hash = hashlib.sha256(vote_string.encode()).hexdigest()
+
+    cursor.execute("""
+    INSERT INTO blockchain
+    (roll_no,candidate,vote_hash,previous_hash,timestamp)
+    VALUES (?,?,?,?,?)
+    """,
+    (roll_no,candidate,vote_hash,previous_hash,datetime.now().isoformat())
+    )
+
+    conn.commit()
+    conn.close()
